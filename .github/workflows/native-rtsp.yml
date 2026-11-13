@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "native-sdk/fix_mmf_rtsp.py"
+      - "native-sdk/add_tcp_stream_mode.py"
       - "native-sdk/build-native-rtsp.sh"
       - ".github/workflows/native-rtsp.yml"
   workflow_dispatch:
@@ -27,6 +28,9 @@ jobs:
           curl --fail --location --retry 3 \
             'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/sample_vio.c' \
             -o /tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio.c
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/sample_vio_main.c' \
+            -o /tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio_main.c
           mkdir -p /tmp/lichee-sdk/middleware/v2/sample/test_mmf/media_server-1.0.1
           curl --fail --location --retry 3 \
             'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/media_server-1.0.1/rtsp-server.cpp' \
@@ -36,6 +40,9 @@ jobs:
           python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk --dry-run
           python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk
           python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk
+          python3 native-sdk/add_tcp_stream_mode.py /tmp/lichee-sdk --dry-run
+          python3 native-sdk/add_tcp_stream_mode.py /tmp/lichee-sdk
+          python3 native-sdk/add_tcp_stream_mode.py /tmp/lichee-sdk
           python3 - <<'PY'
           from pathlib import Path
           p = Path("/tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio.c").read_text()
@@ -48,13 +55,19 @@ jobs:
           assert rtsp.count('if (filename == "/live")') >= 2
           assert rtsp.count('filename.erase(0, 6);') >= 2
           assert 'if (!filename.empty() &&' in rtsp
-          print("Patch OK: binding, diagnostics, buffer lifetime, RTSP routing, idempotence")
+          tcp = p.split("static int _test_vi_venc_h265_tcp(void)",1)[1].split("static int _test_rtsp_h264(void)",1)[0]
+          assert 'tcp_h265_send_all(client_fd' in tcp
+          assert 'listen_addr.sin_port = htons(8555);' in tcp
+          assert 'if (send_failed) break;' in tcp
+          entry = Path("/tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio_main.c").read_text()
+          assert 'case 14:' in entry
+          print("Patch OK: mode 10 RTSP fixes + mode 14 raw TCP fallback + idempotence")
           PY
 
   full-sdk-build:
     name: Build native RISC-V executable
     needs: verify-patch
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_build }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_build) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -102,6 +115,7 @@ jobs:
           source build/cvisetup.sh
           defconfig sg2002_licheervnano_sd
           python3 "$GITHUB_WORKSPACE/native-sdk/fix_mmf_rtsp.py" "$SDK"
+          python3 "$GITHUB_WORKSPACE/native-sdk/add_tcp_stream_mode.py" "$SDK"
           # In a fresh SDK checkout the kernel UAPI headers are not generated.
           # Middleware examples need linux/cvi_type.h and chip-specific cvi_defines.h.
           # Reuse the original SDK's user-space UAPI headers without building a kernel.
@@ -125,11 +139,11 @@ jobs:
           build_middleware
           test -s middleware/v2/sample/test_mmf/test_mmf
           mkdir -p "$GITHUB_WORKSPACE/native-sdk/out"
-          cp middleware/v2/sample/test_mmf/test_mmf "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed"
-          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed"
-          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed" | grep -Eiq 'RISC-V|RISC.V'
+          cp middleware/v2/sample/test_mmf/test_mmf "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_tcp"
+          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_tcp"
+          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_tcp" | grep -Eiq 'RISC-V|RISC.V'
       - uses: actions/upload-artifact@v4
         with:
-          name: native-rtsp-sg2002-riscv64
-          path: native-sdk/out/test_mmf_fixed
+          name: native-tcp-h265-sg2002-riscv64
+          path: native-sdk/out/test_mmf_tcp
           if-no-files-found: error
