@@ -105,3 +105,27 @@ The smoke and displacement detectors will need additional temporal/shape algorit
 2. VENC produces decodable H.264/H.265 stream; browser/player and Mac receive it.
 3. FPS, input dimensions, decode quality, and SoC temperature are logged.
 4. IVE motion test works on two actual frames and later from live Y channel.
+
+
+## Troubleshooting: VPSS group already exists (0xc0068004)
+
+Observed on board after starting \`test_mmf 1\`:
+
+\`\`\`
+[_mmf_vpss_init_new]-1150: CVI_VPSS_CreateGrp(grp:0) failed with 0xc0068004, retry!
+\`\`\`
+
+This is **CVI_ERR_VPSS_EXIST** (error code \`EN_ERR_EXIST = 4\`), as defined in [cvi_errno.h](https://github.com/sipeed/LicheeRV-Nano-Build/blob/main/osdrv/interdrv/v2/include/common/uapi/linux/cvi_errno.h). The [VPSS driver source](https://github.com/sipeed/LicheeRV-Nano-Build/blob/main/osdrv/interdrv/v2/vpss/common/vpss.c) returns this error when \`vpssCtx[VpssGrp]\` is already occupied.
+
+This is a resource conflict, **not evidence that GC4653 or the sensor pin mapping is wrong**. Potential causes: a prior camera process still owns VPSS group 0, or driver state was not cleaned up after termination.
+
+Recovery:
+1. Stop every previous camera test with Ctrl+C in its SSH session (do not run two at once).
+2. On board, run \`ps | grep -E '[t]est_mmf|[C]SIStream|[l]ichee_color_stream|[s]ensor_test'\` and \`netstat -lnt | grep 8554\`.
+3. If an old \`test_mmf\` still runs and you own it, stop it gracefully; restart from a clean state. Avoid killing unrelated processes.
+4. If none remains but VPSS group 0 stays allocated, reboot normally (\`reboot\`) to reset kernel/media state; SSH will disconnect. After reconnect, start **only** \`/mnt/system/usr/bin/test_mmf 10\` (do not run mode 1 concurrently).
+5. Observe whether it prints \`rtsp://<ip>:8554/live\` and keeps running, then on Mac run \`ffplay -rtsp_transport tcp rtsp://10.22.149.1:8554/live\` (or actual reachable board IP). If refused, check \`netstat -lnt | grep 8554\`, board IP, and server stdout.
+
+Note: \`Connection refused\` observed **before** starting RTSP mode 10 is expected and doesn't diagnose the newly started service. RTSP address printed by the sample may pick a different USB network interface; select an actually reachable address.
+
+This troubleshooting does **not** imply live RTSP has been verified; validation requires playback and recorded FPS.
