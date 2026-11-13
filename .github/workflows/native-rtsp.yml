@@ -1,0 +1,87 @@
+name: Native SG2002 RTSP (MMF)
+
+on:
+  push:
+    paths:
+      - "native-sdk/fix_mmf_rtsp.py"
+      - "native-sdk/build-native-rtsp.sh"
+      - ".github/workflows/native-rtsp.yml"
+  workflow_dispatch:
+    inputs:
+      full_build:
+        description: "Build complete SG2002 MMF SDK and upload patched RISC-V binary"
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  verify-patch:
+    name: Verify patch matches upstream SDK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned upstream source (lightweight check)
+        run: |
+          mkdir -p /tmp/lichee-sdk/middleware/v2/sample/test_mmf
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/sample_vio.c' \
+            -o /tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio.c
+      - name: Validate and apply patch
+        run: |
+          python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk --dry-run
+          python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk
+          python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio.c").read_text()
+          s = p.split("static int _test_vi_venc_h265_rtsp(void)", 1)[1].split("static int _test_multiple_vi(void)", 1)[0]
+          assert 'rtsp_server_init("0.0.0.0", 8554)' in s
+          assert s.index("mmf_enc_h265_pop(ch, &stream)") < s.index("mmf_enc_h265_free(ch)")
+          assert s.index("mmf_enc_h265_free(ch)") < s.index("mmf_vi_frame_free(vi_ch)")
+          assert "[native-rtsp] frame=" in s
+          print("Patch OK: binding, diagnostics, buffer lifetime, idempotence")
+          PY
+
+  full-sdk-build:
+    name: Build native RISC-V executable
+    needs: verify-patch
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_build }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config git curl wget unzip file bc \
+            flex bison python3 libssl-dev libncurses-dev rsync cpio
+      - name: Download official SDK and host cross-toolchain
+        run: |
+          git clone --depth 1 https://github.com/sipeed/LicheeRV-Nano-Build.git "$RUNNER_TEMP/LicheeRV-Nano-Build"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/host-tools.tar.gz" \
+            "https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/07/16/host-tools.tar.gz"
+          mkdir -p "$RUNNER_TEMP/host-tools"
+          tar -xzf "$RUNNER_TEMP/host-tools.tar.gz" -C "$RUNNER_TEMP/host-tools"
+          ln -s "$RUNNER_TEMP/host-tools" "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools"
+      - name: Configure and build SG2002 middleware with patched native RTSP
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDK="$RUNNER_TEMP/LicheeRV-Nano-Build"
+          cd "$SDK"
+          source build/cvisetup.sh
+          defconfig sg2002_licheervnano_sd
+          python3 "$GITHUB_WORKSPACE/native-sdk/fix_mmf_rtsp.py" "$SDK"
+          build_middleware
+          test -s middleware/v2/sample/test_mmf/test_mmf
+          mkdir -p "$GITHUB_WORKSPACE/native-sdk/out"
+          cp middleware/v2/sample/test_mmf/test_mmf "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed"
+          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed"
+          file "$GITHUB_WORKSPACE/native-sdk/out/test_mmf_fixed" | grep -Eiq 'RISC-V|RISC.V'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-rtsp-sg2002-riscv64
+          path: native-sdk/out/test_mmf_fixed
+          if-no-files-found: error
