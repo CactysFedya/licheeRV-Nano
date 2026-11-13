@@ -95,7 +95,6 @@ def patch_vio(src):
     old_writer = clone[begin:end]
     writer = r"""
             static unsigned long long packet_count = 0;
-            int send_failed = 0;
             for (int i = 0; i < stream.count; ++i) {
                 if (stream.data_size[i] > 0 &&
                     tcp_h265_send_all(client_fd,
@@ -113,6 +112,12 @@ def patch_vio(src):
             }
 """
     clone = clone[:begin] + writer + clone[end:]
+    clone = once(
+        clone,
+        "\\t\\tstart = _get_time_us();\\n\\t\\t{\\n",
+        "\\t\\tstart = _get_time_us();\\n\\t\\tint send_failed = 0;\\n\\t\\t{\\n",
+        "declare send_failed outside writer block",
+    )
     # Ensure all encoder/VI resources are released *before* breaking on send.
     clone = once(
         clone,
