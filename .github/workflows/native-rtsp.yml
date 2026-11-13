@@ -54,7 +54,7 @@ jobs:
   full-sdk-build:
     name: Build native RISC-V executable
     needs: verify-patch
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_build }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_build) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -80,7 +80,9 @@ jobs:
       - name: Configure and build SG2002 middleware with patched native RTSP
         shell: bash
         run: |
-          set -Eeuo pipefail
+          # The vendor build/cvisetup.sh intentionally reads unset variables.
+          # Do not enable Bash nounset (-u) while using the Sipeed SDK.
+          set -Eeo pipefail
           SDK="$RUNNER_TEMP/LicheeRV-Nano-Build"
           cd "$SDK"
           source build/cvisetup.sh
