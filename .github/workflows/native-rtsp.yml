@@ -62,9 +62,13 @@ jobs:
           git clone --depth 1 https://github.com/sipeed/LicheeRV-Nano-Build.git "$RUNNER_TEMP/LicheeRV-Nano-Build"
           curl -fL --retry 3 -o "$RUNNER_TEMP/host-tools.tar.gz" \
             "https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/07/16/host-tools.tar.gz"
-          mkdir -p "$RUNNER_TEMP/host-tools"
-          tar -xzf "$RUNNER_TEMP/host-tools.tar.gz" -C "$RUNNER_TEMP/host-tools"
-          ln -s "$RUNNER_TEMP/host-tools" "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools"
+          mkdir -p "$RUNNER_TEMP/host-tools-extract"
+          tar -xzf "$RUNNER_TEMP/host-tools.tar.gz" -C "$RUNNER_TEMP/host-tools-extract"
+          CROSS_DIR="$(find "$RUNNER_TEMP/host-tools-extract" -type d -path '*/gcc/riscv64-linux-musl-x86_64' -print -quit)"
+          test -n "$CROSS_DIR"
+          HOST_ROOT="${CROSS_DIR%/gcc/riscv64-linux-musl-x86_64}"
+          ln -s "$HOST_ROOT" "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools"
+          ls "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools/gcc/riscv64-linux-musl-x86_64"
       - name: Configure and build SG2002 middleware with patched native RTSP
         shell: bash
         run: |
