@@ -27,6 +27,10 @@ jobs:
           curl --fail --location --retry 3 \
             'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/sample_vio.c' \
             -o /tmp/lichee-sdk/middleware/v2/sample/test_mmf/sample_vio.c
+          mkdir -p /tmp/lichee-sdk/middleware/v2/sample/test_mmf/media_server-1.0.1
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/sipeed/LicheeRV-Nano-Build/main/middleware/v2/sample/test_mmf/media_server-1.0.1/rtsp-server.cpp' \
+            -o /tmp/lichee-sdk/middleware/v2/sample/test_mmf/media_server-1.0.1/rtsp-server.cpp
       - name: Validate and apply patch
         run: |
           python3 native-sdk/fix_mmf_rtsp.py /tmp/lichee-sdk --dry-run
@@ -40,7 +44,11 @@ jobs:
           assert s.index("mmf_enc_h265_pop(ch, &stream)") < s.index("mmf_enc_h265_free(ch)")
           assert s.index("mmf_enc_h265_free(ch)") < s.index("mmf_vi_frame_free(vi_ch)")
           assert "[native-rtsp] frame=" in s
-          print("Patch OK: binding, diagnostics, buffer lifetime, idempotence")
+          rtsp = Path("/tmp/lichee-sdk/middleware/v2/sample/test_mmf/media_server-1.0.1/rtsp-server.cpp").read_text()
+          assert rtsp.count('if (filename == "/live")') >= 2
+          assert rtsp.count('filename.erase(0, 6);') >= 2
+          assert 'if (!filename.empty() &&' in rtsp
+          print("Patch OK: binding, diagnostics, buffer lifetime, RTSP routing, idempotence")
           PY
 
   full-sdk-build:
