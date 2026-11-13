@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the patched Sipeed test_mmf using a previously configured SG2002 SDK.
 # Usage: bash native-sdk/build-native-rtsp.sh /path/to/LicheeRV-Nano-Build
-set -Eeuo pipefail
+# Sipeed's build/cvisetup.sh reads unset variables; do not use Bash -u here.
+set -Eeo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK_ROOT="$(cd -- "${1:?Usage: bash native-sdk/build-native-rtsp.sh /path/to/configured/LicheeRV-Nano-Build}" && pwd)"
