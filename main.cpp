@@ -303,28 +303,36 @@ int main(int argc, char** argv) {
     }
     Shared shared;
     const auto start = Clock::now();
-    std::thread producer(capture_loop, std::ref(cap), std::ref(shared), std::cref(o), start);
-    std::cout << "[HTTP] open http://<board-ip>:" << o.port << "/ (one client at a time)\n";
+    // CVITEK CSI capture is kept on the main thread, the same thread that
+    // called cap.open(0). The original working CSIStream does this too.
+    // A network client is served in the separate thread instead.
+    std::thread server([&]() {
+        std::cout << "[HTTP] open http://<board-ip>:" << o.port
+                  << "/ (one client at a time)\n";
+        while (!shared.stop && !expired(o, start)) {
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(sock, &rfds);
+            timeval tv{0, 200000};
+            const int ready = select(sock+1, &rfds, nullptr, nullptr, &tv);
+            if (ready < 0 && errno == EINTR) continue;
+            if (ready <= 0) continue;
+            sockaddr_in peer{};
+            socklen_t peer_size = sizeof(peer);
+            int fd = accept(sock, reinterpret_cast<sockaddr*>(&peer), &peer_size);
+            if (fd < 0) continue;
+            std::cout << "[CLIENT] " << inet_ntoa(peer.sin_addr) << std::endl;
+            serve_client(fd, shared, o, start);
+            shutdown(fd, SHUT_RDWR);
+            close(fd);
+        }
+    });
 
-    while (!shared.stop && !expired(o, start)) {
-        fd_set rfds;
-        FD_ZERO(&rfds); FD_SET(sock, &rfds);
-        timeval tv{0, 200000};
-        const int ready = select(sock+1, &rfds, nullptr, nullptr, &tv);
-        if (ready < 0 && errno == EINTR) continue;
-        if (ready <= 0) continue;
-        sockaddr_in peer{};
-        socklen_t peer_size = sizeof(peer);
-        int fd = accept(sock, reinterpret_cast<sockaddr*>(&peer), &peer_size);
-        if (fd < 0) continue;
-        std::cout << "[CLIENT] " << inet_ntoa(peer.sin_addr) << std::endl;
-        serve_client(fd, shared, o, start);
-        shutdown(fd, SHUT_RDWR);
-        close(fd);
-    }
+    std::cout << "[CAMERA] capture/open/release all on main thread\n";
+    capture_loop(cap, shared, o, start);
     shared.stop = true;
+    server.join();
     close(sock);
-    producer.join();
     cap.release();
     std::cout << "[DONE] capture=" << shared.grabbed.load() << " streamed="
               << shared.sent.load() << " errors=" << shared.failed.load() << '\n';
