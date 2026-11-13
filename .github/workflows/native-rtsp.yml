@@ -66,7 +66,8 @@ jobs:
             build-essential cmake pkg-config git curl wget unzip file bc \
             flex bison python3 libssl-dev libncurses-dev rsync cpio
       - name: Restore cached SG2002 compiler archive
-        uses: actions/cache@v4
+        id: tool-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/host-tools.tar.gz
           key: sg2002-host-tools-2026-v1
@@ -84,6 +85,12 @@ jobs:
           HOST_ROOT="${CROSS_DIR%/gcc/riscv64-linux-musl-x86_64}"
           ln -s "$HOST_ROOT" "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools"
           ls "$RUNNER_TEMP/LicheeRV-Nano-Build/host-tools/gcc/riscv64-linux-musl-x86_64"
+      - name: Cache toolchain before building (also on later build failures)
+        if: steps.tool-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/host-tools.tar.gz
+          key: sg2002-host-tools-2026-v1
       - name: Configure and build SG2002 middleware with patched native RTSP
         shell: bash
         run: |
@@ -102,7 +109,8 @@ jobs:
           mkdir -p "$UAPI"
           for dir in \
             "$SDK/osdrv/interdrv/v2/include/common/uapi/linux" \
-            "$SDK/osdrv/interdrv/v2/include/chip/mars/uapi/linux"; do
+            "$SDK/osdrv/interdrv/v2/include/chip/mars/uapi/linux" \
+            "$SDK/linux_5.10/drivers/staging/android/uapi"; do
             test -d "$dir"
             for header in "$dir"/*.h; do
               [[ -e "$UAPI/$(basename "$header")" ]] || ln -s "$header" "$UAPI/"
@@ -110,6 +118,7 @@ jobs:
           done
           test -f "$UAPI/cvi_type.h"
           test -f "$UAPI/cvi_defines.h"
+          test -f "$UAPI/ion_cvitek.h"
           echo "Prepared SDK UAPI: $UAPI"
           build_middleware
           test -s middleware/v2/sample/test_mmf/test_mmf
