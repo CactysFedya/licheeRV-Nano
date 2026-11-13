@@ -135,7 +135,7 @@ static void capture_loop(cv::VideoCapture& camera, Shared& shared,
         const auto t_begin = Clock::now();
         cv::Mat frame;
         bool ok = false;
-        try { ok = camera.read(frame); }
+        try { camera >> frame; ok = !frame.empty(); }
         catch (const cv::Exception& e) { std::cerr << "Capture exception: " << e.what() << '\n'; }
         const auto t_captured = Clock::now();
         if (ok && !frame.empty()) {
