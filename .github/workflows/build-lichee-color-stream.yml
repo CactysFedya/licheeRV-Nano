@@ -1,0 +1,54 @@
+name: Build LicheeRV Nano color MJPEG
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'main.cpp'
+      - 'CMakeLists.txt'
+      - 'build-linux.sh'
+      - '.github/workflows/build-lichee-color-stream.yml'
+
+jobs:
+  cross-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake unzip curl file
+
+      - name: Download official SDK cross-compiler
+        run: |
+          curl -fL --retry 3 -o "$RUNNER_TEMP/host-tools.tar.gz" \
+            "https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/07/16/host-tools.tar.gz"
+          mkdir -p "$RUNNER_TEMP/toolchains"
+          tar -xzf "$RUNNER_TEMP/host-tools.tar.gz" -C "$RUNNER_TEMP/toolchains"
+          COMPILER_EXE="$(find "$RUNNER_TEMP/toolchains" -name riscv64-unknown-linux-musl-g++ -print -quit)"
+          test -n "$COMPILER_EXE"
+          echo "COMPILER=$(dirname "$COMPILER_EXE")" >> "$GITHUB_ENV"
+
+      - name: Download compatible opencv-mobile package
+        run: |
+          mkdir -p libs
+          curl -fL --retry 3 -o "$RUNNER_TEMP/opencv.zip" \
+            "https://sourceforge.net/projects/opencv-mobile.mirror/files/v31/opencv-mobile-4.10.0-licheerv-nano.zip/download"
+          unzip -q "$RUNNER_TEMP/opencv.zip" -d libs
+          test -f libs/opencv-mobile-4.10.0-licheerv-nano/lib/cmake/opencv4/OpenCVConfig.cmake
+
+      - name: Build for SG2002
+        run: bash build-linux.sh
+
+      - name: Verify executable architecture
+        run: |
+          file build/lichee_color_stream
+          file build/lichee_color_stream | grep -Ei 'RISC.V|RISC-V'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: licheervnano-color-mjpeg-riscv64
+          path: build/lichee_color_stream
+          if-no-files-found: error

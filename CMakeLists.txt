@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.10)
+project(lichee_color_stream LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Must be the licheerv-nano package matching the target runtime (riscv64-linux-musl).
+if(NOT DEFINED OpenCV_DIR)
+  set(OpenCV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/opencv-mobile-4.10.0-licheerv-nano/lib/cmake/opencv4")
+endif()
+find_package(OpenCV REQUIRED)
+add_executable(lichee_color_stream main.cpp)
+target_include_directories(lichee_color_stream PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_compile_options(lichee_color_stream PRIVATE -O2 -Wall -Wextra)
+target_link_libraries(lichee_color_stream PRIVATE ${OpenCV_LIBS} pthread)
