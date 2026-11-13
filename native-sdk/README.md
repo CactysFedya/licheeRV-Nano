@@ -1,5 +1,46 @@
 # Native SG2002 video path (without OpenCV)
 
+## Mode 14: live H.265 directly over TCP (experimental)
+
+Mode 10 RTSP currently initializes ISP but fails to pop video frames.
+The new mode 14 reuses the mode-6 VI/VENC sequence, which previously recorded
+a decodable H.265 file. It opens a simple TCP listener instead of using the
+RTSP implementation. It only starts camera resources after a viewer connects.
+Stock mode 6 and patched mode 10 remain available.
+
+Source: [native-sdk/add_tcp_stream_mode.py](add_tcp_stream_mode.py).
+
+Build output: GitHub Actions artifact named native-tcp-h265-sg2002-riscv64
+(when a complete SG2002 build succeeds). Extract test_mmf_tcp.
+
+Mac: upload:
+
+```bash
+scp ~/Downloads/test_mmf_tcp root@10.22.149.1:/root/
+ssh root@10.22.149.1
+```
+
+Board: with all other camera processes stopped:
+
+```sh
+chmod +x /root/test_mmf_tcp
+/root/test_mmf_tcp 14
+```
+
+Wait for a message that TCP is listening on 0.0.0.0:8555.
+
+Mac, new terminal:
+
+```bash
+ffplay -f hevc tcp://10.22.149.1:8555
+```
+
+This is raw H.265 without RTSP metadata, timestamps, authentication or TLS.
+Use it only on a trusted private network. One client is supported.
+Working live color, FPS and hardware stability remain unverified until tested.
+
+---
+
 ## Build result — 2026-11-13
 
 **Native RTSP executable cross-compiled successfully** in
