@@ -1,5 +1,43 @@
 # Native SG2002 video path (without OpenCV)
 
+## Build result — 2026-11-13
+
+**Native RTSP executable cross-compiled successfully** in
+[GitHub Actions run 43448362110](https://github.com/CactysFedya/licheeRV-Nano/actions/runs/43448362110).
+
+- [Artifact download](https://github.com/CactysFedya/licheeRV-Nano/actions/runs/43448362110/artifacts/14048672873): `native-rtsp-sg2002-riscv64.zip`, containing `test_mmf_fixed`.
+- Binary: 12,408,504 bytes, ELF 64-bit UCB RISC-V / RVC, double-float ABI, **statically linked**.
+- SHA-256: `91f3f476b145fe59893a5104ae085e7bb1f28ff0009aed7086ef00fa5470a9d7`.
+- Compiled from Sipeed SDK default branch and patch at commit `0cb255a109589612efd0ccc9758800a0f7b23044`.
+- **Not yet run or tested on the physical LicheeRV Nano**. A successful cross-build does not establish RTSP availability, video color, or FPS.
+
+### Deploy compiled file (Mac → board)
+
+Unzip `native-rtsp-sg2002-riscv64.zip`, then from the folder containing `test_mmf_fixed`:
+
+```bash
+scp ./test_mmf_fixed root@10.22.149.1:/root/test_mmf_fixed
+```
+
+On the board (no other process using the camera):
+
+```sh
+chmod +x /root/test_mmf_fixed
+cd /root/native-test
+/root/test_mmf_fixed 10 2>&1 | tee /root/native-test/rtsp-fixed.log
+```
+
+From Mac (while binary runs):
+
+```bash
+ffplay -rtsp_transport tcp rtsp://10.22.149.1:8554/live/camera
+```
+
+The stock binary at `/mnt/system/usr/bin/test_mmf` remains untouched.
+Full SDK cross-build is now manual-only in Actions to avoid accidental repeated large builds.
+
+---
+
 ## Current implementation: patched native RTSP (2026-11-13)
 
 **Source change committed, not yet compiled or verified on the user's board.**
