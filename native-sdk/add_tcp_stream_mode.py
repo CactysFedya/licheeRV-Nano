@@ -114,8 +114,8 @@ def patch_vio(src):
     clone = clone[:begin] + writer + clone[end:]
     clone = once(
         clone,
-        "\\t\\tstart = _get_time_us();\\n\\t\\t{\\n",
-        "\\t\\tstart = _get_time_us();\\n\\t\\tint send_failed = 0;\\n\\t\\t{\\n",
+        "\t\tstart = _get_time_us();\n\t\t{\n",
+        "\t\tstart = _get_time_us();\n\t\tint send_failed = 0;\n\t\t{\n",
         "declare send_failed outside writer block",
     )
     # Ensure all encoder/VI resources are released *before* breaking on send.
