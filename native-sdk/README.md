@@ -1,5 +1,39 @@
 # Native SG2002 video path (without OpenCV)
 
+## Without a new MMF binary: stock mode 6 → FIFO → TCP
+
+The custom TCP mode 14 connects to the Mac, but the first observed frame pop
+failed and no decoded frames have been confirmed. To distinguish native SDK
+compatibility from a transport issue, this independent experiment uses the
+**original firmware binary** `/mnt/system/usr/bin/test_mmf 6`, which was
+previously able to record H.265. It replaces the regular output file with a
+named FIFO, consumed by `nc`. There is **no video data written to storage**.
+
+After a clean board restart, with other camera programs stopped:
+
+```sh
+sh /root/stream_stock_h265_fifo.sh
+```
+
+Mac (second terminal):
+
+```sh
+ffplay -f hevc tcp://10.22.149.1:8555
+```
+
+Upload [stream_stock_h265_fifo.sh](stream_stock_h265_fifo.sh) with `scp`
+or fetch its raw GitHub URL. If it fails to start, inspect the printed
+`/tmp/nano-h265.XXXXXX/camera.log`. The use of FIFO and netcat is an
+**experimental diagnostic workaround**, not yet a tested end-to-end stream.
+Netcat port 8555 has no authentication; only run on a trusted local network.
+
+The Sipeed repository [issue #833](https://github.com/sipeed/LicheeRV-Nano-Build/issues/833)
+reports VB/ION allocations retained after MMF shutdown on some firmware.
+This does not prove our board has that leak; a clean restart provides a more
+reliable comparison between stock and newly compiled binaries.
+
+---
+
 ## Mode 14: live H.265 directly over TCP (experimental)
 
 Mode 10 RTSP currently initializes ISP but fails to pop video frames.
