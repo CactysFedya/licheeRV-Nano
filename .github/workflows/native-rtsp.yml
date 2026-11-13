@@ -54,7 +54,7 @@ jobs:
   full-sdk-build:
     name: Build native RISC-V executable
     needs: verify-patch
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_build) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_build }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
