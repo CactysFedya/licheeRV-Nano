@@ -11,7 +11,7 @@ OUT="$REPO_DIR/native-sdk/out"
 
 if [[ ! -f "$SDK_ROOT/build/.config" ]]; then
   echo >&2 "ERROR: $SDK_ROOT/build/.config is missing."
-  echo >&2 "First configure the official SDK: source build/cvisetup.sh; defconfig cv1812cp_licheerv_nano_sd"
+  echo >&2 "First configure the official SDK: source build/cvisetup.sh; defconfig sg2002_licheervnano_sd"
   exit 1
 fi
 if [[ ! -f "$PARAM" || ! -f "$TARGET_DIR/Makefile" ]]; then
