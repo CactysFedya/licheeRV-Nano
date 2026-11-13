@@ -160,16 +160,108 @@ def patch(path: pathlib.Path, dry_run: bool) -> None:
     print("Original backup:", backup)
 
 
+
+def patch_server(path: pathlib.Path, dry_run: bool) -> None:
+    """Fix the /live and /live/camera routes in upstream RTSP DESCRIBE/SETUP.
+
+    The stock implementation accepts /live in DESCRIBE but rejects it
+    in SETUP. It also checks /live before /live/, leaving a leading slash
+    on camera names; and dereferences rbegin() on an empty path.
+    """
+    content = path.read_text(encoding="utf-8")
+    describe_start = "static int rtsp_ondescribe("
+    setup_start = "static int rtsp_onsetup("
+    play_start = "static int rtsp_onplay("
+    if any(content.count(s) != 1 for s in
+           (describe_start, setup_start, play_start)):
+        raise RuntimeError("RTSP server function boundaries not found")
+
+    before, rest = content.split(describe_start, 1)
+    describe, rest = rest.split(setup_start, 1)
+    setup, after = rest.split(play_start, 1)
+    describe = describe_start + describe
+    setup = setup_start + setup
+
+    describe = replace_once(
+        describe,
+        '''\tif (strstartswith(filename.c_str(), "/live"))
+\t{
+\t\tfilename = filename.c_str() + 5;
+\t}
+\telse if (strstartswith(filename.c_str(), "/live/"))
+\t{
+\t\tfilename = filename.c_str() + 6;
+\t}''',
+        '''\tif (filename == "/live")
+\t{
+\t\tfilename.clear();
+\t}
+\telse if (strstartswith(filename.c_str(), "/live/"))
+\t{
+\t\tfilename.erase(0, 6);
+\t}''',
+        "correct RTSP DESCRIBE /live camera route",
+    )
+
+    setup = replace_once(
+        setup,
+        '''\tif (strstartswith(filename.c_str(), "/live/"))
+\t{
+\t\tfilename = filename.c_str() + 6;
+\t}''',
+        '''\tif (filename == "/live")
+\t{
+\t\tfilename.clear();
+\t}
+\telse if (strstartswith(filename.c_str(), "/live/"))
+\t{
+\t\tfilename.erase(0, 6);
+\t}''',
+        "accept both /live and /live/camera in RTSP SETUP",
+    )
+
+    setup = replace_once(
+        setup,
+        """\tif ('\\\\' == *filename.rbegin() || '/' == *filename.rbegin())
+\t\tfilename.erase(filename.end() - 1);""",
+        """\tif (!filename.empty() &&
+\t\t('\\\\' == filename.back() || '/' == filename.back()))
+\t\tfilename.pop_back();""",
+        "do not dereference end of empty filename",
+    )
+
+    result = before + describe + setup + play_start + after
+    if result == content:
+        print("No changes necessary:", path)
+        return
+    if dry_run:
+        print("Dry run OK:", path)
+        return
+    backup = path.with_suffix(path.suffix + ".orig")
+    if not backup.exists():
+        shutil.copy2(path, backup)
+    path.write_text(result, encoding="utf-8")
+    print("Wrote:", path)
+    print("Original backup:", backup)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("sdk_root", type=pathlib.Path)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    source = args.sdk_root.resolve() / "middleware/v2/sample/test_mmf/sample_vio.c"
-    if not source.is_file():
-        parser.error(f"Source not found: {source}")
+    target = args.sdk_root.resolve() / "middleware/v2/sample/test_mmf"
+    source = target / "sample_vio.c"
+    rtsp_server = target / "media_server-1.0.1/rtsp-server.cpp"
+    for candidate in (source, rtsp_server):
+        if not candidate.is_file():
+            parser.error(f"Source not found: {candidate}")
     try:
-        patch(source, args.dry_run)
+        # Validate both first so an incompatible SDK cannot be half-patched.
+        patch(source, True)
+        patch_server(rtsp_server, True)
+        if not args.dry_run:
+            patch(source, False)
+            patch_server(rtsp_server, False)
     except RuntimeError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
