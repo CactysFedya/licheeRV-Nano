@@ -1,5 +1,81 @@
 # Native SG2002 video path (without OpenCV)
 
+## Current implementation: patched native RTSP (2026-11-13)
+
+**Source change committed, not yet compiled or verified on the user's board.**
+Do not run more stock tests to diagnose already working H.265 recording.
+The stock `test_mmf 6` produced a decodable 2560x1440/25fps file on this board.
+
+The new patch scripts live here:
+
+- `fix_mmf_rtsp.py`: guarded, idempotent patch to the Sipeed SDK;
+- `build-native-rtsp.sh`: builds `test_mmf_fixed` with configured SDK libraries;
+- [Native RTSP GitHub Actions](https://github.com/CactysFedya/licheeRV-Nano/actions/workflows/native-rtsp.yml): fast patch check on push, **manual full-build** option.
+
+Fixes relative to stock mode 10:
+
+1. Bind RTSP on `0.0.0.0:8554`, not just the interface auto-selected by Sipeed (board previously displayed `10.22.150.1` while SSH used `10.22.149.1`).
+2. Hold the original VI frame until after VENC pop and free, as in the working mode 6.
+3. Log first and every 100th VI frame, VI errors, and socket endpoint.
+4. Fix upstream RTSP server handling for `/live` and `/live/camera`; the stock DESCRIBE and SETUP functions disagreed, and SETUP could dereference an empty filename.
+
+### Option A: GitHub Actions (no local SDK setup)
+
+Open [Native SG2002 RTSP (MMF)](https://github.com/CactysFedya/licheeRV-Nano/actions/workflows/native-rtsp.yml),
+select **Run workflow**, and leave `full_build=true`. It will attempt the official
+SG2002 C906 SDK middleware build and upload an artifact named
+`native-rtsp-sg2002-riscv64` **only if the job succeeds**. This extensive
+build is not yet proven to finish on a GitHub-hosted runner; inspect the
+Actions job result. The fast CI check only validates patch applicability,
+not runtime compatibility.
+
+### Option B: existing Linux build server with prepared official SDK
+
+From the local clone of this repository on **Linux** (not the Mac or the board):
+
+```bash
+git pull --ff-only
+bash native-sdk/build-native-rtsp.sh /path/to/LicheeRV-Nano-Build
+```
+
+The SDK must already have `build/.config` and built middleware libraries.
+For an unconfigured SDK, follow the [official MMF build instructions](https://wiki.sipeed.com/hardware/en/lichee/RV_Nano/8_mmf_development_guide.html)
+first. Current upstream README for a C906 target uses
+`defconfig sg2002_licheervnano_sd`. Run `build_middleware` once before
+the script; do not try to compile the complete SDK on the 128 MiB board.
+The resulting executable is `native-sdk/out/test_mmf_fixed`.
+
+### Install the successfully built binary
+
+Copy the artifact or server-built `test_mmf_fixed` from the **Mac**:
+
+```bash
+scp ~/Downloads/test_mmf_fixed root@10.22.149.1:/root/test_mmf_fixed
+```
+
+**On the board**, with other camera programs stopped:
+
+```sh
+chmod +x /root/test_mmf_fixed
+cd /root/native-test
+/root/test_mmf_fixed 10 2>&1 | tee /root/native-test/rtsp-fixed.log
+```
+
+**On the Mac**, in a second terminal while the board process is alive:
+
+```bash
+ffplay -rtsp_transport tcp rtsp://10.22.149.1:8554/live/camera
+```
+
+Do not overwrite stock `/mnt/system/usr/bin/test_mmf`. On failure,
+retain the startup log and see whether it reports `frame=1`, repeated
+`VI pop failed`, encoder errors, or a socket initialization error.
+On success, inspect actual image **color**, not just `yuv420p` metadata.
+A functional RTSP session and observed frame rate still need device tests.
+
+---
+
+
 This project will use the **Sipeed/CVITEK MMF SDK** instead of opencv-mobile for camera capture and video processing.
 
 ## Hardware verified in previous board tests
