@@ -120,6 +120,8 @@ jobs:
           test -f "$UAPI/cvi_defines.h"
           test -f "$UAPI/ion_cvitek.h"
           echo "Prepared SDK UAPI: $UAPI"
+          # Prepacked libcvi_json-c/libcvi_miniz and related SDK prerequisites.
+          build_3rd_party
           build_middleware
           test -s middleware/v2/sample/test_mmf/test_mmf
           mkdir -p "$GITHUB_WORKSPACE/native-sdk/out"
