@@ -65,11 +65,18 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake pkg-config git curl wget unzip file bc \
             flex bison python3 libssl-dev libncurses-dev rsync cpio
+      - name: Restore cached SG2002 compiler archive
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/host-tools.tar.gz
+          key: sg2002-host-tools-2026-v1
       - name: Download official SDK and host cross-toolchain
         run: |
           git clone --depth 1 https://github.com/sipeed/LicheeRV-Nano-Build.git "$RUNNER_TEMP/LicheeRV-Nano-Build"
-          curl -fL --retry 3 -o "$RUNNER_TEMP/host-tools.tar.gz" \
-            "https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/07/16/host-tools.tar.gz"
+          if [[ ! -s "$RUNNER_TEMP/host-tools.tar.gz" ]]; then
+            curl -fL --retry 3 -o "$RUNNER_TEMP/host-tools.tar.gz" \
+              "https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/07/16/host-tools.tar.gz"
+          fi
           mkdir -p "$RUNNER_TEMP/host-tools-extract"
           tar -xzf "$RUNNER_TEMP/host-tools.tar.gz" -C "$RUNNER_TEMP/host-tools-extract"
           CROSS_DIR="$(find "$RUNNER_TEMP/host-tools-extract" -type d -path '*/gcc/riscv64-linux-musl-x86_64' -print -quit)"
@@ -88,6 +95,22 @@ jobs:
           source build/cvisetup.sh
           defconfig sg2002_licheervnano_sd
           python3 "$GITHUB_WORKSPACE/native-sdk/fix_mmf_rtsp.py" "$SDK"
+          # In a fresh SDK checkout the kernel UAPI headers are not generated.
+          # Middleware examples need linux/cvi_type.h and chip-specific cvi_defines.h.
+          # Reuse the original SDK's user-space UAPI headers without building a kernel.
+          UAPI="$SDK/linux_5.10/build/sg2002_licheervnano_sd/riscv/usr/include/linux"
+          mkdir -p "$UAPI"
+          for dir in \
+            "$SDK/osdrv/interdrv/v2/include/common/uapi/linux" \
+            "$SDK/osdrv/interdrv/v2/include/chip/mars/uapi/linux"; do
+            test -d "$dir"
+            for header in "$dir"/*.h; do
+              [[ -e "$UAPI/$(basename "$header")" ]] || ln -s "$header" "$UAPI/"
+            done
+          done
+          test -f "$UAPI/cvi_type.h"
+          test -f "$UAPI/cvi_defines.h"
+          echo "Prepared SDK UAPI: $UAPI"
           build_middleware
           test -s middleware/v2/sample/test_mmf/test_mmf
           mkdir -p "$GITHUB_WORKSPACE/native-sdk/out"
