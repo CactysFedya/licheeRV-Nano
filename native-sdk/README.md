@@ -10,8 +10,11 @@ Stock mode 6 and patched mode 10 remain available.
 
 Source: [native-sdk/add_tcp_stream_mode.py](add_tcp_stream_mode.py).
 
-Build output: GitHub Actions artifact named native-tcp-h265-sg2002-riscv64
-(when a complete SG2002 build succeeds). Extract test_mmf_tcp.
+Build **succeeded** on 2026-11-13: [Actions run 43481847834](https://github.com/CactysFedya/licheeRV-Nano/actions/runs/43481847834).
+[Download `native-tcp-h265-sg2002-riscv64`](https://github.com/CactysFedya/licheeRV-Nano/actions/runs/43481847834/artifacts/14064738812).
+The archive contains `test_mmf_tcp`, a 12,415,504-byte statically linked RISC-V ELF.
+SHA-256 of executable: `ac04b4360e55d8dee9e9f32e0bd8a715f674d7663d91a450f4139fb893f4987f`.
+**Only the cross-build is verified; hardware streaming has not been validated.**
 
 Mac: upload:
 
